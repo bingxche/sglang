@@ -563,6 +563,12 @@ class CudaGraphRunner:
         next_token_logits_buffer = buffers.next_token_logits_buffer[:num_tokens]
         buffers.num_token_non_padded[...] = num_tokens
 
+        # Debug: Log positions during capture
+        from sglang.srt.distributed import get_tp_group
+        if get_tp_group().rank == 0:
+            mrope_info = f", mrope[:,:num_tokens]={mrope_positions}, mrope[:,:bs]={buffers.mrope_positions[:,:bs]}" if mrope_positions is not None else ""
+            logger.info(f"[CAPTURE] bs={bs}, num_tokens={num_tokens}, positions[:num_tokens]={positions}, positions[:bs]={buffers.positions[:bs]}{mrope_info}")
+
         # pipeline parallelism
         if self.pp_size > 1:
             pp_proxy_tensors = PPProxyTensors(
@@ -849,6 +855,12 @@ class CudaGraphRunner:
             graph_key = f"{get_current_stream_idx()}_{self.bs}"
         else:
             graph_key = self.bs
+
+        from sglang.srt.distributed import get_tp_group
+        if get_tp_group().rank == 0:
+            mrope_info = f", mrope[:,:raw_num_token]={self.buffers.mrope_positions[:,:self.raw_num_token]}, mrope[:,:graph_key]={self.buffers.mrope_positions[:,:graph_key]}" if self.buffers.mrope_positions is not None else ""
+            logger.info(f"[REPLAY] graph_key={graph_key}, raw_num_token={self.raw_num_token}, positions[:raw_num_token]={self.buffers.positions[:self.raw_num_token]}, positions[:graph_key]={self.buffers.positions[:graph_key]}{mrope_info}")
+
         self.graphs[graph_key].replay()
         output = self.output_buffers[graph_key]
 
