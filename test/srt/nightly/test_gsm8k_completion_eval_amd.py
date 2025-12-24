@@ -238,7 +238,7 @@ AMD_DEEPSEEK_V3_TC_MODELS = [
             "--cuda-graph-max-bs",
             "8",  # Reduced from 16 to reduce memory
             "--enable-torch-compile",
-            "--disable-cuda-graph",  # Disable cuda graph to avoid memory issues
+            # "--disable-cuda-graph",  # Disable cuda graph to avoid memory issues
             "--trust-remote-code",
         ],
         env_vars={
