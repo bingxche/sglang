@@ -21,7 +21,7 @@ ENV BUILD_TRITON="0"
 ENV BUILD_LLVM="0"
 ENV BUILD_AITER_ALL="1"
 ENV BUILD_MOONCAKE="1"
-ENV AITER_COMMIT="yanbo/sglang_debug"
+ENV AITER_COMMIT="c3708fb7445899c14cdc6e8055953ee02ed78ddf"
 
 # ===============================
 # Base image 950 and args
@@ -31,7 +31,7 @@ ENV BUILD_TRITON="0"
 ENV BUILD_LLVM="0"
 ENV BUILD_AITER_ALL="0"
 ENV BUILD_MOONCAKE="1"
-ENV AITER_COMMIT="yanbo/sglang_debug"
+ENV AITER_COMMIT="c3708fb7445899c14cdc6e8055953ee02ed78ddf"
 # ===============================
 # Chosen arch and args
 FROM ${GPU_ARCH}
