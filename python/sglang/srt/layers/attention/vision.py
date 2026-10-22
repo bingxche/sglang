@@ -30,6 +30,7 @@ from sglang.srt.utils import (
     get_device_capability,
     is_cpu,
     is_cuda,
+    is_gfx1250_supported,
     is_hip,
     is_musa,
     is_npu,
@@ -1317,7 +1318,12 @@ class VisionAttention(nn.Module):
             else:
                 backend = "triton_attn"
         elif _is_hip:
-            if get_device_capability() >= (9, 4) and _use_aiter:
+            # aiter's CK flash_attn_varlen_func does not build for gfx1250.
+            if (
+                get_device_capability() >= (9, 4)
+                and _use_aiter
+                and not is_gfx1250_supported()
+            ):
                 backend = "aiter_attn"
             else:
                 backend = "triton_attn"
