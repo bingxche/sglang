@@ -85,6 +85,7 @@ SPEC = MonoSpec(
     load_tensor=_load_tensor,
 )
 OLD_SPEC = replace(SPEC, api_version=registry.MONOKERNEL_API_VERSION - 1)
+TYPED_SPEC = replace(SPEC, name="typed", load_tensor=None)
 # a DSpark draft at 2 draft tokens with anchor sampling: 1-token blocks
 ONE_TOKEN_DRAFT = replace(SPEC, tokens_per_request=lambda model: 1)
 
@@ -115,7 +116,7 @@ def batch(mode, bs, rows):
     )
 
 
-def install(*, archs, lookups=None, is_load_observed=False):
+def install(*, archs, lookups=None, is_load_observed=False, model_type=None):
     """install_monokernel_forward on an Lm, as rank 0 of two whose gathered lookups
     are lookups, or as the only rank."""
     lm = Lm()
@@ -133,7 +134,7 @@ def install(*, archs, lookups=None, is_load_observed=False):
     ):
         runtime.install_monokernel_forward(
             model=lm,
-            hf_config=SimpleNamespace(architectures=archs),
+            hf_config=SimpleNamespace(architectures=archs, model_type=model_type),
             capture_tail_hooks=[],
         )
     return lm
@@ -200,6 +201,55 @@ class TestMonokernelFramework(CustomTestCase):
             registry.find_spec(backend=BACKEND, architectures=[ARCH], isa="gfx950")[0],
             SPEC,
         )
+
+    def test_a_model_type_picks_its_spec_within_an_architecture(self):
+        # DeepSeek-V4 and V4.1 share one architecture and need different kernels
+        register = partial(registry.register, backend=BACKEND, architecture=ARCH)
+        register(path=f"{__name__}:TYPED_SPEC", model_type="typed")
+        find = partial(
+            registry.find_spec, backend=BACKEND, architectures=[ARCH], isa="gfx950"
+        )
+        self.assertIs(find(model_type="typed")[0], TYPED_SPEC)
+        # the spec registered for any model_type serves the other models
+        self.assertIs(find(model_type="fake")[0], SPEC)
+        self.assertIs(find()[0], SPEC)
+        with self.assertRaises(ValueError):
+            register(path="other:SPEC", model_type="typed")
+        # the startup check and the weights observer look up the model's model_type
+        self.assertIs(reasons_for(server_args(), model_type="typed")[0], TYPED_SPEC)
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(architectures=[ARCH], model_type="typed")
+        weights = [("layers.0.shared.weight", torch.ones(16, dtype=torch.uint8))]
+        with (
+            patch.object(runtime, "_backend", return_value=BACKEND),
+            patch.object(runtime, "device_isa", return_value="gfx950"),
+        ):
+            # TYPED_SPEC keeps no copies, so the weights pass through untouched
+            self.assertIs(
+                runtime.monokernel_weights_iterator(model=model, weights=weights),
+                weights,
+            )
+
+    def test_a_typed_spec_serves_only_its_model_type(self):
+        registry.register(
+            backend=BACKEND,
+            architecture="Shared",
+            path=f"{__name__}:TYPED_SPEC",
+            model_type="typed",
+        )
+        spec, reason = registry.find_spec(
+            backend=BACKEND, architectures=["Shared"], isa="gfx950", model_type="v1"
+        )
+        self.assertIsNone(spec)
+        self.assertIn("(model_type 'v1')", reason)
+        registered = partial(
+            registry.spec_registered, backend=BACKEND, architectures=["Shared"]
+        )
+        self.assertTrue(registered(model_type="typed"))
+        self.assertFalse(registered(model_type="v1"))
+        # a model no spec serves keeps its forward
+        lm = install(archs=["Shared"], model_type="v1")
+        self.assertEqual(lm.forward(None, None, batch("decode", 1, 1)), "normal")
 
     def test_features_in_use_are_refused_unless_accepted(self):
         # every probe is off at SGLang's defaults: one stuck on refuses every server

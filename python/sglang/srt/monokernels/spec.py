@@ -166,29 +166,54 @@ class MonoSpec(msgspec.Struct, frozen=True):
         return self.devices[isa].widths
 
 
-# backend name -> HF architecture -> the "module:attribute" path of its spec
-_REGISTRY: dict[str, dict[str, str]] = {}
+# backend name -> HF architecture -> HF model_type (None: any) -> the
+# "module:attribute" path of its spec
+_REGISTRY: dict[str, dict[str, dict[Optional[str], str]]] = {}
 
 
-def register(*, backend: str, architecture: str, path: str) -> None:
-    """Register a module:attribute spec path from a general plugin entry point."""
-    specs = _REGISTRY.setdefault(backend, {})
-    if specs.get(architecture, path) != path:
+def register(
+    *, backend: str, architecture: str, path: str, model_type: Optional[str] = None
+) -> None:
+    """Register a module:attribute spec path from a general plugin entry point; a
+    model_type limits it to one of the models that share the architecture."""
+    specs = _REGISTRY.setdefault(backend, {}).setdefault(architecture, {})
+    if specs.get(model_type, path) != path:
+        what = architecture if model_type is None else f"{architecture} ({model_type})"
         raise ValueError(
-            f"monokernel backend {backend!r} already has a spec for {architecture}: "
-            f"{specs[architecture]}"
+            f"monokernel backend {backend!r} already has a spec for {what}: "
+            f"{specs[model_type]}"
         )
-    specs[architecture] = path
+    specs[model_type] = path
 
 
-def spec_registered(*, backend: str, architectures: Optional[Sequence[str]]) -> bool:
+def _spec_path(
+    *, backend: str, architecture: str, model_type: Optional[str]
+) -> Optional[str]:
+    """The path registered for the model_type, else the one registered for any."""
+    paths = _REGISTRY.get(backend, {}).get(architecture, {})
+    return paths.get(model_type, paths.get(None))
+
+
+def spec_registered(
+    *,
+    backend: str,
+    architectures: Optional[Sequence[str]],
+    model_type: Optional[str] = None,
+) -> bool:
     """Whether the backend registers a spec for any architecture, usable or not."""
-    specs = _REGISTRY.get(backend, {})
-    return any(arch in specs for arch in architectures or ())
+    return any(
+        _spec_path(backend=backend, architecture=arch, model_type=model_type)
+        is not None
+        for arch in architectures or ()
+    )
 
 
 def find_spec(
-    *, backend: str, architectures: Optional[Sequence[str]], isa: Optional[str]
+    *,
+    backend: str,
+    architectures: Optional[Sequence[str]],
+    isa: Optional[str],
+    model_type: Optional[str] = None,
 ) -> tuple[Optional[MonoSpec], str]:
     """The compatible spec and an empty reason, or None and a rejection reason."""
     if backend not in _REGISTRY:
@@ -198,7 +223,7 @@ def find_spec(
         )
     why = []
     for arch in architectures or ():
-        path = _REGISTRY[backend].get(arch)
+        path = _spec_path(backend=backend, architecture=arch, model_type=model_type)
         if path is None:
             continue
         module, _, attr = path.partition(":")
@@ -218,6 +243,7 @@ def find_spec(
         elif isa in spec.devices:
             return spec, ""
     archs = list(architectures or ())
+    of_type = f" (model_type {model_type!r})" if model_type else ""
     return None, "; ".join(why) or (
-        f"monokernel backend {backend!r} has no spec for {archs} on {isa}"
+        f"monokernel backend {backend!r} has no spec for {archs}{of_type} on {isa}"
     )
