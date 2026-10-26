@@ -49,6 +49,12 @@ class TestQwen35GDNPackedFP8InProj(CustomTestCase):
 
         if not qwen3_5._use_aiter:
             raise unittest.SkipTest("SGLANG_USE_AITER was disabled at import")
+        from sglang.srt.layers.quantization.fp8_utils import (
+            use_aiter_bpreshuffle_gemm,
+        )
+
+        if not use_aiter_bpreshuffle_gemm(64):
+            raise unittest.SkipTest("packing targets aiter's bpreshuffle FP8 GEMM")
         cls.module = qwen3_5
         cls.gdn_cls = qwen3_5.Qwen3_5GatedDeltaNet
 
