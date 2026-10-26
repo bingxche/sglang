@@ -125,6 +125,7 @@ def test_short_prefill_index_bound_matches_full_scan(topk):
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
+@pytest.mark.skipif(not _IS_GFX950, reason="D_CHUNK above 64 is gfx950-only")
 @pytest.mark.parametrize("active_splits", [2, 4])
 def test_reduce_d_chunk_is_bitwise_identical(active_splits):
     torch.manual_seed(active_splits)
