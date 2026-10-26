@@ -7,7 +7,7 @@
 #include <cstdint>
 #ifndef USE_ROCM
 #include <cuda_fp8.h>
-#elif defined(__gfx950__) || defined(__gfx1200__) || defined(__gfx1201__)
+#elif defined(__gfx950__) || defined(__gfx1200__) || defined(__gfx1201__) || defined(__gfx1250__)
 // Only on the arches that take the hardware branch below. hip_fp8.h is what defines
 // HIP_FP8_TYPE_FNUZ, and nothing else in this include tree pulls it in, so gating on
 // those macros instead would also flip the software cast's arch constants on gfx942 --
