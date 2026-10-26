@@ -2733,5 +2733,7 @@ def mhc_combine(
         y.stride(0),
         HC=hc,
         BLOCK_H=block_h,
+        # ROCm's hc_boundary kernels build their combine with FMA contraction off; y must match them bitwise.
+        enable_fp_fusion=not _is_hip,
     )
     return y
