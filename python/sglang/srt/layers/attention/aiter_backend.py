@@ -37,6 +37,7 @@ from sglang.srt.speculative.spec_utils import (
     generate_draft_decode_kv_indices,
 )
 from sglang.srt.utils import is_gfx95_supported
+from sglang.srt.utils.common import is_gfx1250_supported
 
 if TYPE_CHECKING:
     from sglang.srt.layers.radix_attention import RadixAttention
@@ -153,6 +154,35 @@ _MLA_REDUCE_V1_HEADS = {
 # fake non-ps, intra_batch_mode needs to be True for non-ps-mode
 fast_mode = False
 intra_batch_mode = True if _use_mla_ps_kernel else False
+
+
+def _unified_attention_pow2_heads(*, q, k, out, sinks=None, **kwargs):
+    """aiter's gfx1250 Gluon unified_attention kernels need the number of query
+    heads per KV head to be a power of 2. Pad each KV group's query heads up to
+    one, run, and copy the real heads back into ``out``."""
+    num_tokens, num_q_heads, head_dim = q.shape
+    num_kv_heads = k.shape[2]
+    ratio = num_q_heads // num_kv_heads
+    if not is_gfx1250_supported() or ratio & (ratio - 1) == 0:
+        return unified_attention(q=q, k=k, out=out, sinks=sinks, **kwargs)
+
+    padded_ratio = 1 << ratio.bit_length()
+    padded_q = q.new_zeros(num_tokens, num_kv_heads, padded_ratio, head_dim)
+    padded_q[:, :, :ratio] = q.view(num_tokens, num_kv_heads, ratio, head_dim)
+    padded_out = out.new_empty(num_tokens, num_kv_heads * padded_ratio, out.shape[-1])
+    if sinks is not None:
+        padded_sinks = sinks.new_zeros(num_kv_heads, padded_ratio)
+        padded_sinks[:, :ratio] = sinks.view(num_kv_heads, ratio)
+        sinks = padded_sinks.view(-1)
+    unified_attention(
+        q=padded_q.view(num_tokens, -1, head_dim),
+        k=k,
+        out=padded_out,
+        sinks=sinks,
+        **kwargs,
+    )
+    real = padded_out.view(num_tokens, num_kv_heads, padded_ratio, -1)[:, :, :ratio]
+    out.copy_(real.reshape(out.shape))
 
 
 class WrapperDispatch(Enum):
@@ -526,12 +556,18 @@ class AiterAttnBackend(AttentionBackend):
 
         self.kv_cache_is_vectorized_5d = _pool_is_vec5d(model_runner.token_to_kv_pool)
 
-        if self.use_sliding_window_kv_pool:
+        # paged_attention_ragged (cpp_itfs, GFX9-only) and the CK
+        # mha_batch_prefill have no gfx1250 implementation.
+        if self.use_sliding_window_kv_pool or (
+            is_gfx1250_supported() and not self.use_mla
+        ):
             self.use_triton_unified_attention = True
         else:
             self.use_triton_unified_attention = get_bool_env_var(
                 "SGLANG_USE_AITER_UNIFIED_ATTN"
             )
+        # Lazily allocated (page_table, swa_page_table) for extend on gfx1250.
+        self._extend_page_table_bufs = None
 
         # Decode metadata format. unified_attention and pa_decode_gluon (the
         # SHUFFLE 5D decode kernel) both read kv_indices as a 2-D
@@ -540,6 +576,17 @@ class AiterAttnBackend(AttentionBackend):
         self.decode_uses_page_table = (
             self.use_triton_unified_attention or self.kv_cache_is_vectorized_5d
         )
+
+        # unified_attention's tile width equals the page size, so a smaller page
+        # produces wrong output rather than failing. On gfx1250 every non-MLA
+        # layer takes this path, so reject the unsupported sizes instead.
+        if is_gfx1250_supported() and not self.use_mla and self.page_size < 16:
+            raise ValueError(
+                f"page_size={self.page_size} is not supported on gfx1250 for "
+                "non-MLA models: aiter unified_attention's tile width equals the "
+                "page size, so smaller pages produce wrong output. Use "
+                "page_size >= 16 (the gfx1250 default for the aiter backend is 32)."
+            )
 
         # When topk == 1 the EAGLE draft chain is linear, so target_verify's
         # mask reduces to pure causal and can go through unified_attention
@@ -1152,15 +1199,37 @@ class AiterAttnBackend(AttentionBackend):
         page_size = self.page_size
         max_blocks = max((max_kv_len + page_size - 1) // page_size, 1)
 
-        page_table = torch.zeros(bs, max_blocks, dtype=torch.int32, device=device)
-
         swa_slot_mapping = None
         swa_page_table = None
         if self.use_sliding_window_kv_pool:
             swa_slot_mapping = self.swa_kv_pool.full_to_swa_index_mapping.long()
-            swa_page_table = torch.zeros(
-                bs, max_blocks, dtype=torch.int32, device=device
-            )
+
+        if is_gfx1250_supported():
+            # aiter's gfx1250 Gluon prefill kernel takes the block-table stride and
+            # the sequence count as compile-time constants, so a fresh table per
+            # batch recompiles it while serving. Hand out views of one table sized
+            # for every request slot (fixed stride), with the row count rounded up
+            # to a power of 2; _forward_extend_unified makes the extra rows empty
+            # sequences.
+            if self._extend_page_table_bufs is None:
+                shape = (
+                    self.req_to_token.shape[0],
+                    triton.cdiv(self.req_to_token.shape[1], page_size),
+                )
+                full = torch.zeros(shape, dtype=torch.int32, device=device)
+                swa = torch.zeros_like(full) if swa_slot_mapping is not None else None
+                self._extend_page_table_bufs = (full, swa)
+            full, swa = self._extend_page_table_bufs
+            num_rows = min(triton.next_power_of_2(bs), full.shape[0])
+            page_table = full[:num_rows, :max_blocks]
+            if swa is not None:
+                swa_page_table = swa[:num_rows, :max_blocks]
+        else:
+            page_table = torch.zeros(bs, max_blocks, dtype=torch.int32, device=device)
+            if swa_slot_mapping is not None:
+                swa_page_table = torch.zeros(
+                    bs, max_blocks, dtype=torch.int32, device=device
+                )
 
         BLOCK_SIZE = 1024
         grid = (bs, triton.cdiv(max_blocks, BLOCK_SIZE))
@@ -1206,6 +1275,11 @@ class AiterAttnBackend(AttentionBackend):
         cu_seqlens_q[1:] = torch.cumsum(
             forward_batch.extend_seq_lens.to(torch.int32), dim=0
         )
+        seq_lens = forward_batch.seq_lens
+        if page_table.shape[0] > bs:
+            pad = page_table.shape[0] - bs
+            cu_seqlens_q = torch.cat([cu_seqlens_q, cu_seqlens_q[-1:].expand(pad)])
+            seq_lens = torch.cat([seq_lens, seq_lens.new_zeros(pad)])
 
         # unified_attention uses (left, right) window = (window-1, 0), NOT the
         # CK convention (window, -1). Match the decode path (`de_window`).
@@ -1222,13 +1296,13 @@ class AiterAttnBackend(AttentionBackend):
             (q_u.shape[0], layer.tp_q_head_num, layer.v_head_dim),
             dtype=self.input_dtype,
         )
-        unified_attention(
+        _unified_attention_pow2_heads(
             q=q_u,
             k=k_cache.view(-1, self.page_size, layer.tp_k_head_num, layer.qk_head_dim),
             v=v_cache.view(-1, self.page_size, layer.tp_v_head_num, layer.v_head_dim),
             out=o,
             cu_seqlens_q=cu_seqlens_q,
-            seqused_k=forward_batch.seq_lens,
+            seqused_k=seq_lens,
             max_seqlen_q=self.forward_metadata.max_q_len,
             max_seqlen_k=pt.shape[1] * self.page_size,
             softmax_scale=layer.scaling,
@@ -4210,7 +4284,7 @@ class AiterAttnBackend(AttentionBackend):
                     # The seq_lens + draft_num add has to run INSIDE the graph
                     # region; a host-side pre-add would allocate a new tensor
                     # each replay and break the captured pointer.
-                    unified_attention(
+                    _unified_attention_pow2_heads(
                         q=q_unified,
                         k=k_unified,
                         v=v_unified,
@@ -4328,7 +4402,7 @@ class AiterAttnBackend(AttentionBackend):
                     )
                 ):
                     return o.view(-1, layer.tp_q_head_num * layer.v_head_dim)
-                unified_attention(
+                _unified_attention_pow2_heads(
                     q=q.view(-1, layer.tp_q_head_num, layer.qk_head_dim),
                     k=k_cache.view(
                         -1, self.page_size, layer.tp_k_head_num, layer.qk_head_dim
@@ -4819,7 +4893,7 @@ class AiterAttnBackend(AttentionBackend):
                     )
                     q, _ = scaled_fp8_quant(q, q_descale)
 
-                unified_attention(
+                _unified_attention_pow2_heads(
                     q=q.view(-1, layer.tp_q_head_num, layer.qk_head_dim),
                     k=k_cache.view(
                         -1, self.page_size, layer.tp_k_head_num, layer.qk_head_dim
