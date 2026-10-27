@@ -390,7 +390,10 @@ def _model_inverse_rope(x, freqs_real, positions):
     fused_rope_inplace(x, None, freqs_cis, positions, inverse=True)
 
 
-@unittest.skipUnless(is_hip(), "HIP radix backend")
+@unittest.skipUnless(
+    is_hip() and is_gfx95_supported(),
+    "the aiter sparse decode with extra_* (packed) inputs is gfx950-only",
+)
 class TestDecodeSelectionOrder(CustomTestCase):
     """The HIP decode top-k must be ordered by position, not slot: the aiter sparse
     kernel sums in list order, so a slot-ordered row makes the attention bits depend
