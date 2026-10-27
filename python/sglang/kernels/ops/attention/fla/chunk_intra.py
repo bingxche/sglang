@@ -159,14 +159,14 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
         p_g0 = tl.make_block_ptr(
             g, (T, K), (H * K, 1), (i_tc0, i_k * BK), (BC, BK), (1, 0)
         )
-        b_k0 = tl.load(p_k0, boundary_check=(0, 1)).to(tl.float32)
-        b_g0 = tl.load(p_g0, boundary_check=(0, 1)).to(tl.float32)
+        b_k0 = tl.load(p_k0, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+        b_g0 = tl.load(p_g0, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
 
         if FUSE_DIAGONAL:
             p_q0 = tl.make_block_ptr(
                 q, (T, K), (H * K, 1), (i_tc0, i_k * BK), (BC, BK), (1, 0)
             )
-            b_q0 = tl.load(p_q0, boundary_check=(0, 1)).to(tl.float32)
+            b_q0 = tl.load(p_q0, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
             b_gn0 = tl.load(g + i_tc0 * H * K + o_k, mask=m_k, other=0).to(tl.float32)
             b_gm0 = tl.clamp(b_g0 - b_gn0[None, :], -126.0, 126.0)
             b_gq0 = tl.where(m_tc0[:, None], exp2(b_gm0), 0.0)
@@ -186,9 +186,9 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                 g, (T, K), (H * K, 1), (i_tc1, i_k * BK), (BC, BK), (1, 0)
             )
             # [BC, BK]
-            b_q1 = tl.load(p_q1, boundary_check=(0, 1)).to(tl.float32)
-            b_k1 = tl.load(p_k1, boundary_check=(0, 1)).to(tl.float32)
-            b_g1 = tl.load(p_g1, boundary_check=(0, 1)).to(tl.float32)
+            b_q1 = tl.load(p_q1, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+            b_k1 = tl.load(p_k1, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+            b_g1 = tl.load(p_g1, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
             # [BK]
             b_gn1 = tl.load(g + i_tc1 * H * K + o_k, mask=m_k, other=0).to(tl.float32)
             # [BC, BK]
@@ -219,9 +219,9 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                     g, (T, K), (H * K, 1), (i_tc2, i_k * BK), (BC, BK), (1, 0)
                 )
                 # [BC, BK]
-                b_q2 = tl.load(p_q2, boundary_check=(0, 1)).to(tl.float32)
-                b_k2 = tl.load(p_k2, boundary_check=(0, 1)).to(tl.float32)
-                b_g2 = tl.load(p_g2, boundary_check=(0, 1)).to(tl.float32)
+                b_q2 = tl.load(p_q2, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+                b_k2 = tl.load(p_k2, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+                b_g2 = tl.load(p_g2, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
                 # [BK]
                 b_gn2 = tl.load(g + i_tc2 * H * K + o_k, mask=m_k, other=0).to(
                     tl.float32
@@ -258,9 +258,9 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                         g, (T, K), (H * K, 1), (i_tc3, i_k * BK), (BC, BK), (1, 0)
                     )
                     # [BC, BK]
-                    b_q3 = tl.load(p_q3, boundary_check=(0, 1)).to(tl.float32)
-                    b_k3 = tl.load(p_k3, boundary_check=(0, 1)).to(tl.float32)
-                    b_g3 = tl.load(p_g3, boundary_check=(0, 1)).to(tl.float32)
+                    b_q3 = tl.load(p_q3, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+                    b_k3 = tl.load(p_k3, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+                    b_g3 = tl.load(p_g3, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
                     # [BK]
                     b_gn3 = tl.load(g + i_tc3 * H * K + o_k, mask=m_k, other=0).to(
                         tl.float32
@@ -306,7 +306,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
         p_b1 = tl.make_block_ptr(
             beta + bos * H + i_h, (T,), (H,), (i_tc1,), (BC,), (0,)
         )
-        b_b1 = tl.load(p_b1, boundary_check=(0,)).to(tl.float32)
+        b_b1 = tl.load(p_b1, boundary_check=(0,), padding_option="zero").to(tl.float32)
         b_Akk10 = b_Akk10 * b_b1[:, None]
     if i_tc2 < T:
         p_Aqk20 = tl.make_block_ptr(
@@ -325,7 +325,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
         p_b2 = tl.make_block_ptr(
             beta + bos * H + i_h, (T,), (H,), (i_tc2,), (BC,), (0,)
         )
-        b_b2 = tl.load(p_b2, boundary_check=(0,)).to(tl.float32)
+        b_b2 = tl.load(p_b2, boundary_check=(0,), padding_option="zero").to(tl.float32)
         b_Akk20 = b_Akk20 * b_b2[:, None]
         b_Akk21 = b_Akk21 * b_b2[:, None]
     if i_tc3 < T:
@@ -351,7 +351,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
         p_b3 = tl.make_block_ptr(
             beta + bos * H + i_h, (T,), (H,), (i_tc3,), (BC,), (0,)
         )
-        b_b3 = tl.load(p_b3, boundary_check=(0,)).to(tl.float32)
+        b_b3 = tl.load(p_b3, boundary_check=(0,), padding_option="zero").to(tl.float32)
         b_Akk30 = b_Akk30 * b_b3[:, None]
         b_Akk31 = b_Akk31 * b_b3[:, None]
         b_Akk32 = b_Akk32 * b_b3[:, None]
@@ -406,10 +406,10 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
         p_bd3 = tl.make_block_ptr(
             beta + bos * H + i_h, (T,), (H,), (i_tc3,), (BC,), (0,)
         )
-        b_bd0 = tl.load(p_bd0, boundary_check=(0,)).to(tl.float32)
-        b_bd1 = tl.load(p_bd1, boundary_check=(0,)).to(tl.float32)
-        b_bd2 = tl.load(p_bd2, boundary_check=(0,)).to(tl.float32)
-        b_bd3 = tl.load(p_bd3, boundary_check=(0,)).to(tl.float32)
+        b_bd0 = tl.load(p_bd0, boundary_check=(0,), padding_option="zero").to(tl.float32)
+        b_bd1 = tl.load(p_bd1, boundary_check=(0,), padding_option="zero").to(tl.float32)
+        b_bd2 = tl.load(p_bd2, boundary_check=(0,), padding_option="zero").to(tl.float32)
+        b_bd3 = tl.load(p_bd3, boundary_check=(0,), padding_option="zero").to(tl.float32)
         b_Akk_d0 = b_Akk_d0 * b_bd0[:, None]
         b_Akk_d1 = b_Akk_d1 * b_bd1[:, None]
         b_Akk_d2 = b_Akk_d2 * b_bd2[:, None]
@@ -451,10 +451,10 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
         p_Akk33 = tl.make_block_ptr(
             Akkd, (T, BC), (H * BC, 1), (i_tc3, 0), (BC, BC), (1, 0)
         )
-        b_Ai00 = tl.load(p_Akk00, boundary_check=(0, 1)).to(tl.float32)
-        b_Ai11 = tl.load(p_Akk11, boundary_check=(0, 1)).to(tl.float32)
-        b_Ai22 = tl.load(p_Akk22, boundary_check=(0, 1)).to(tl.float32)
-        b_Ai33 = tl.load(p_Akk33, boundary_check=(0, 1)).to(tl.float32)
+        b_Ai00 = tl.load(p_Akk00, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+        b_Ai11 = tl.load(p_Akk11, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+        b_Ai22 = tl.load(p_Akk22, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+        b_Ai33 = tl.load(p_Akk33, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
 
     ################################################################################
     # forward substitution on diagonals
@@ -562,19 +562,19 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
         p_b0 = tl.make_block_ptr(
             beta + bos * H + i_h, (T,), (H,), (i_tc0,), (BC,), (0,)
         )
-        b_b0 = tl.load(p_b0, boundary_check=(0,)).to(tl.float32)
+        b_b0 = tl.load(p_b0, boundary_check=(0,), padding_option="zero").to(tl.float32)
         p_b1r = tl.make_block_ptr(
             beta + bos * H + i_h, (T,), (H,), (i_tc1,), (BC,), (0,)
         )
-        b_b1r = tl.load(p_b1r, boundary_check=(0,)).to(tl.float32)
+        b_b1r = tl.load(p_b1r, boundary_check=(0,), padding_option="zero").to(tl.float32)
         p_b2r = tl.make_block_ptr(
             beta + bos * H + i_h, (T,), (H,), (i_tc2,), (BC,), (0,)
         )
-        b_b2r = tl.load(p_b2r, boundary_check=(0,)).to(tl.float32)
+        b_b2r = tl.load(p_b2r, boundary_check=(0,), padding_option="zero").to(tl.float32)
         p_b3r = tl.make_block_ptr(
             beta + bos * H + i_h, (T,), (H,), (i_tc3,), (BC,), (0,)
         )
-        b_b3r = tl.load(p_b3r, boundary_check=(0,)).to(tl.float32)
+        b_b3r = tl.load(p_b3r, boundary_check=(0,), padding_option="zero").to(tl.float32)
 
         # ---- u = A_inv @ (v * beta) ----
         v_base = v_in + (bos * H + i_h) * V
@@ -593,10 +593,10 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                 v_base, (T, V), (H * V, 1), (i_tc3, i_v * BV), (BC, BV), (1, 0)
             )
 
-            b_v0 = tl.load(p_v0, boundary_check=(0, 1))
-            b_v1 = tl.load(p_v1, boundary_check=(0, 1))
-            b_v2 = tl.load(p_v2, boundary_check=(0, 1))
-            b_v3 = tl.load(p_v3, boundary_check=(0, 1))
+            b_v0 = tl.load(p_v0, boundary_check=(0, 1), padding_option="zero")
+            b_v1 = tl.load(p_v1, boundary_check=(0, 1), padding_option="zero")
+            b_v2 = tl.load(p_v2, boundary_check=(0, 1), padding_option="zero")
+            b_v3 = tl.load(p_v3, boundary_check=(0, 1), padding_option="zero")
 
             b_vb0 = (b_v0 * b_b0[:, None]).to(b_v0.dtype)
             b_vb1 = (b_v1 * b_b1r[:, None]).to(b_v1.dtype)
@@ -672,15 +672,15 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                 g, (T, K), (H * K, 1), (i_tc3, i_k * BK), (BC, BK), (1, 0)
             )
 
-            b_k0r = tl.load(p_k0, boundary_check=(0, 1))
-            b_k1r = tl.load(p_k1, boundary_check=(0, 1))
-            b_k2r = tl.load(p_k2, boundary_check=(0, 1))
-            b_k3r = tl.load(p_k3, boundary_check=(0, 1))
+            b_k0r = tl.load(p_k0, boundary_check=(0, 1), padding_option="zero")
+            b_k1r = tl.load(p_k1, boundary_check=(0, 1), padding_option="zero")
+            b_k2r = tl.load(p_k2, boundary_check=(0, 1), padding_option="zero")
+            b_k3r = tl.load(p_k3, boundary_check=(0, 1), padding_option="zero")
 
-            b_gk0r = tl.load(p_gk0, boundary_check=(0, 1)).to(tl.float32)
-            b_gk1r = tl.load(p_gk1, boundary_check=(0, 1)).to(tl.float32)
-            b_gk2r = tl.load(p_gk2, boundary_check=(0, 1)).to(tl.float32)
-            b_gk3r = tl.load(p_gk3, boundary_check=(0, 1)).to(tl.float32)
+            b_gk0r = tl.load(p_gk0, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+            b_gk1r = tl.load(p_gk1, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+            b_gk2r = tl.load(p_gk2, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+            b_gk3r = tl.load(p_gk3, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
 
             b_kb0 = (b_k0r * b_b0[:, None] * exp2(b_gk0r)).to(b_k0r.dtype)
             b_kb1 = (b_k1r * b_b1r[:, None] * exp2(b_gk1r)).to(b_k1r.dtype)
@@ -853,10 +853,10 @@ def chunk_kda_fwd_kernel_intra_sub_chunk(
 
     p_beta = tl.make_block_ptr(beta, (T,), (H,), (i_ti,), (BC,), (0,))
 
-    b_q = tl.load(p_q, boundary_check=(0, 1))
-    b_k = tl.load(p_k, boundary_check=(0, 1))
-    b_g = tl.load(p_g, boundary_check=(0, 1))
-    b_beta = tl.load(p_beta, boundary_check=(0,))
+    b_q = tl.load(p_q, boundary_check=(0, 1), padding_option="zero")
+    b_k = tl.load(p_k, boundary_check=(0, 1), padding_option="zero")
+    b_g = tl.load(p_g, boundary_check=(0, 1), padding_option="zero")
+    b_beta = tl.load(p_beta, boundary_check=(0,), padding_option="zero")
 
     if USE_GATHER:
         b_gn = gather(

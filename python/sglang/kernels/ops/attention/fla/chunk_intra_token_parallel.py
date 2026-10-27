@@ -103,10 +103,10 @@ def chunk_kda_fwd_kernel_intra_token_parallel(
     )
     p_beta = tl.make_block_ptr(beta + i_t * H, (H,), (1,), (i_hg * BH,), (BH,), (0,))
     # [BH, BK]
-    b_q = tl.load(p_q, boundary_check=(0, 1)).to(tl.float32)
-    b_k = tl.load(p_k, boundary_check=(0, 1)).to(tl.float32)
-    b_g = tl.load(p_g, boundary_check=(0, 1)).to(tl.float32)
-    b_k = b_k * tl.load(p_beta, boundary_check=(0,)).to(tl.float32)[:, None]
+    b_q = tl.load(p_q, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+    b_k = tl.load(p_k, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+    b_g = tl.load(p_g, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+    b_k = b_k * tl.load(p_beta, boundary_check=(0,), padding_option="zero").to(tl.float32)[:, None]
 
     for j in range(i_ts, min(i_t + 1, min(T, i_ts + BC))):
         p_kj = tl.make_block_ptr(
@@ -116,8 +116,8 @@ def chunk_kda_fwd_kernel_intra_token_parallel(
             g + j * H * K, (H, K), (K, 1), (i_hg * BH, 0), (BH, BK), (1, 0)
         )
         # [BH, BK]
-        b_kj = tl.load(p_kj, boundary_check=(0, 1)).to(tl.float32)
-        b_gj = tl.load(p_gj, boundary_check=(0, 1)).to(tl.float32)
+        b_kj = tl.load(p_kj, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+        b_gj = tl.load(p_gj, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
 
         b_kgj = b_kj * exp2(b_g - b_gj)
 

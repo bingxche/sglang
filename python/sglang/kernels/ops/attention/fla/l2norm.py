@@ -63,7 +63,7 @@ def l2norm_fwd_kernel(
 ):
     i_t = tl.program_id(0)
     p_x = tl.make_block_ptr(x, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0))
-    b_x = tl.load(p_x, boundary_check=(0, 1)).to(tl.float32)
+    b_x = tl.load(p_x, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
     b_var = tl.sum(b_x * b_x, axis=1)
     b_y = b_x / tl.sqrt(b_var + eps)[:, None]
     p_y = tl.make_block_ptr(y, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0))
@@ -166,8 +166,8 @@ def gdn_prefill_qkv_prepare_kernel(
             (BT, BD),
             (1, 0),
         )
-        q_values = tl.load(q_block, boundary_check=(0, 1)).to(tl.float32)
-        k_values = tl.load(k_block, boundary_check=(0, 1)).to(tl.float32)
+        q_values = tl.load(q_block, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+        k_values = tl.load(k_block, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
         q_output_block = tl.make_block_ptr(
             q_out + head_idx * D,
             (T, D),
@@ -204,7 +204,7 @@ def gdn_prefill_qkv_prepare_kernel(
             (BT, BD),
             (1, 0),
         )
-        v_values = tl.load(v_block, boundary_check=(0, 1))
+        v_values = tl.load(v_block, boundary_check=(0, 1), padding_option="zero")
         v_output_block = tl.make_block_ptr(
             v_out + value_head * D,
             (T, D),
