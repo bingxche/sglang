@@ -56,12 +56,13 @@ fi
 IMAGE_TORCH_VERSION=$(docker exec ci_sglang python3 -c 'import torch; print(torch.__version__)')
 IMAGE_HIP_VERSION=$(docker exec ci_sglang python3 -c 'import torch; print(torch.version.hip or "")')
 IMAGE_GPU_ARCH=$(docker exec ci_sglang printenv GPU_ARCH 2>/dev/null || true)
-if [[ "${IMAGE_GPU_ARCH}" =~ ^(gfx942|gfx950|gfx1250)(-rocm720|-rocm724|-rocm1000)?$ ]]; then
+if [[ "${IMAGE_GPU_ARCH}" =~ ^(gfx942|gfx950|gfx1250)(-rocm720|-rocm724|-rocm1000|-rocm1010)?$ ]]; then
     echo "[CI-IMAGE] Image GPU_ARCH=${IMAGE_GPU_ARCH}"
     case "${IMAGE_GPU_ARCH}" in
         *-rocm724) IMAGE_BASE_ARG_SUFFIX="_ROCM724"; IMAGE_STAGE_SUFFIX="-rocm724" ;;
         *-rocm720) IMAGE_BASE_ARG_SUFFIX="_ROCM720"; IMAGE_STAGE_SUFFIX="-rocm720" ;;
         *-rocm1000) IMAGE_BASE_ARG_SUFFIX="_ROCM1000"; IMAGE_STAGE_SUFFIX="-rocm1000" ;;
+        *-rocm1010) IMAGE_BASE_ARG_SUFFIX="_ROCM1010"; IMAGE_STAGE_SUFFIX="-rocm1010" ;;
         *)         IMAGE_BASE_ARG_SUFFIX=""; IMAGE_STAGE_SUFFIX="" ;;
     esac
     IMAGE_GFX="${IMAGE_GPU_ARCH%-*}"
@@ -93,6 +94,9 @@ unset IMAGE_GPU_ARCH
 # srt_hip pins compressed-tensors below the version required by torch 2.11.
 if [[ "${IMAGE_STAGE_SUFFIX}" == "-rocm724" || "${IMAGE_STAGE_SUFFIX}" == "-rocm1000" ]]; then
   EXTRAS="${EXTRAS/dev_hip/dev_hip_rocm724}"
+elif [[ "${IMAGE_STAGE_SUFFIX}" == "-rocm1010" ]]; then
+  # ROCm 10.1 ships torch 2.12.
+  EXTRAS="${EXTRAS/dev_hip/dev_hip_rocm101}"
 fi
 echo "Image torch ${IMAGE_TORCH_VERSION}, HIP ${IMAGE_HIP_VERSION}; installing python extras: [${EXTRAS}]"
 
@@ -244,11 +248,7 @@ elif docker exec ci_sglang test -d /sgl-workspace/mori; then
     exit 1
   fi
 
-  if [[ "${GPU_ARCH}" == "mi35x" ]]; then
-    MORI_GPU_ARCHS="gfx950"
-  else
-    MORI_GPU_ARCHS="gfx942"
-  fi
+  MORI_GPU_ARCHS="${IMAGE_GFX}"
 
   echo "[MORI] Reinstalling MORI ${MORI_COMMIT} (MORI_GPU_ARCHS=${MORI_GPU_ARCHS})"
   # Only the rocm724 and rocm1000 (noble) bases attempt to install
@@ -405,7 +405,7 @@ if [[ "${NEED_REBUILD}" == "true" ]]; then
     "
 
     # Re-apply the Dockerfile torch.Stream patch after re-clone (ROCm/aiter#4817).
-    if [[ "${IMAGE_STAGE_SUFFIX}" == "-rocm724" || "${IMAGE_STAGE_SUFFIX}" == "-rocm1000" ]]; then
+    if [[ "${IMAGE_STAGE_SUFFIX}" == "-rocm724" || "${IMAGE_STAGE_SUFFIX}" == "-rocm1000" || "${IMAGE_STAGE_SUFFIX}" == "-rocm1010" ]]; then
         docker exec -i ci_sglang python3 - <<'PY'
 from pathlib import Path
 p = Path("/sgl-workspace/aiter/csrc/cpp_itfs/torch_utils.py")
@@ -428,11 +428,7 @@ if old in s:
 PY
     fi
 
-    if [[ "${GPU_ARCH}" == "mi35x" ]]; then
-        GPU_ARCH_LIST="gfx950"
-    else
-        GPU_ARCH_LIST="gfx942"
-    fi
+    GPU_ARCH_LIST="${IMAGE_GFX}"
     echo "[CI-AITER-CHECK] GPU_ARCH_LIST=${GPU_ARCH_LIST}"
 
     # The image already has the Dockerfile-pinned Triton; compile against it.
