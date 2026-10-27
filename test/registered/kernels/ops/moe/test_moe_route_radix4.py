@@ -27,6 +27,10 @@ if not torch.cuda.is_available():
 from sglang.kernels.ops.moe import moe_route_radix4
 
 if not moe_route_radix4.supported_hardware():
+    if __name__ == "__main__":
+        # Run as a script (as run_suite.py does), a module-level skip exits 1.
+        print("SKIPPED: the kernel targets gfx942/gfx950.")
+        sys.exit(0)
     pytest.skip("The kernel targets gfx942/gfx950.", allow_module_level=True)
 
 # Deliberately not gated on available(): that reports a kernel which failed to

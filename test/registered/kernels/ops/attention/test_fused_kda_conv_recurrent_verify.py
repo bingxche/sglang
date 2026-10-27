@@ -267,7 +267,10 @@ def test_glm_fp32_weights_match_unfused_reference(case_index):
     _compare_case(_CASES[case_index], weight_dtype=torch.float32)
 
 
-@pytest.mark.skipif(not torch.version.hip, reason="ROCm default launch shape")
+@pytest.mark.skipif(
+    not torch.version.hip or torch.cuda.get_device_properties(0).warp_size != 64,
+    reason="ROCm default launch shape on wave64 GPUs",
+)
 @pytest.mark.parametrize("case_index", [8, 9])
 def test_glm_fp32_weights_bit_exact_on_rocm(case_index):
     # One wave keeps the reference reduction order and separately rounded

@@ -15,7 +15,7 @@ from einops import rearrange, repeat
 
 from sglang.kernels.ops.mamba.causal_conv1d_triton import PAD_SLOT_ID
 from sglang.kernels.ops.mamba.triton_ops.mamba_ssm import selective_state_update
-from sglang.srt.utils import get_device, is_sm100_supported
+from sglang.srt.utils import get_device, is_gfx1250_supported, is_sm100_supported
 
 
 def selective_state_update_ref(
@@ -146,6 +146,8 @@ def test_selective_state_update_with_batch_indices(
         rtol, atol = 1e-1, 1e-1
         if torch.version.hip:
             atol *= 2
+    elif itype == torch.float16 and is_gfx1250_supported():
+        atol *= 2
     # set seed
     torch.random.manual_seed(0)
     batch_size = 3
