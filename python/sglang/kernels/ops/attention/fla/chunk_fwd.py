@@ -105,10 +105,10 @@ def chunk_gated_delta_rule_fwd_kkt_solve_kernel(
     p_b1 = tl.make_block_ptr(beta + bos * H + i_h, (T,), (H,), (i_tc1,), (BC,), (0,))
     p_b2 = tl.make_block_ptr(beta + bos * H + i_h, (T,), (H,), (i_tc2,), (BC,), (0,))
     p_b3 = tl.make_block_ptr(beta + bos * H + i_h, (T,), (H,), (i_tc3,), (BC,), (0,))
-    b_b0 = tl.load(p_b0, boundary_check=(0,)).to(tl.float32)
-    b_b1 = tl.load(p_b1, boundary_check=(0,)).to(tl.float32)
-    b_b2 = tl.load(p_b2, boundary_check=(0,)).to(tl.float32)
-    b_b3 = tl.load(p_b3, boundary_check=(0,)).to(tl.float32)
+    b_b0 = tl.load(p_b0, boundary_check=(0,), padding_option="zero").to(tl.float32)
+    b_b1 = tl.load(p_b1, boundary_check=(0,), padding_option="zero").to(tl.float32)
+    b_b2 = tl.load(p_b2, boundary_check=(0,), padding_option="zero").to(tl.float32)
+    b_b3 = tl.load(p_b3, boundary_check=(0,), padding_option="zero").to(tl.float32)
 
     # load gate if used
     if USE_G:
@@ -117,10 +117,10 @@ def chunk_gated_delta_rule_fwd_kkt_solve_kernel(
         p_g2 = tl.make_block_ptr(g + bos * H + i_h, (T,), (H,), (i_tc2,), (BC,), (0,))
         p_g3 = tl.make_block_ptr(g + bos * H + i_h, (T,), (H,), (i_tc3,), (BC,), (0,))
 
-        b_g0 = tl.load(p_g0, boundary_check=(0,)).to(tl.float32)
-        b_g1 = tl.load(p_g1, boundary_check=(0,)).to(tl.float32)
-        b_g2 = tl.load(p_g2, boundary_check=(0,)).to(tl.float32)
-        b_g3 = tl.load(p_g3, boundary_check=(0,)).to(tl.float32)
+        b_g0 = tl.load(p_g0, boundary_check=(0,), padding_option="zero").to(tl.float32)
+        b_g1 = tl.load(p_g1, boundary_check=(0,), padding_option="zero").to(tl.float32)
+        b_g2 = tl.load(p_g2, boundary_check=(0,), padding_option="zero").to(tl.float32)
+        b_g3 = tl.load(p_g3, boundary_check=(0,), padding_option="zero").to(tl.float32)
 
     ############################################################################
     # Step 1: compute all 10 lower-triangular [BC, BC] blocks of K @ K^T
@@ -144,7 +144,7 @@ def chunk_gated_delta_rule_fwd_kkt_solve_kernel(
         p_k0 = tl.make_block_ptr(
             k, (T, K), (Hg * K, 1), (i_tc0, i_k * BK), (BC, BK), (1, 0)
         )
-        b_k0 = tl.load(p_k0, boundary_check=(0, 1))
+        b_k0 = tl.load(p_k0, boundary_check=(0, 1), padding_option="zero")
         # diagonal block 0
         b_A00 += tl.dot(b_k0, tl.trans(b_k0))
 
@@ -152,7 +152,7 @@ def chunk_gated_delta_rule_fwd_kkt_solve_kernel(
             p_k1 = tl.make_block_ptr(
                 k, (T, K), (Hg * K, 1), (i_tc1, i_k * BK), (BC, BK), (1, 0)
             )
-            b_k1 = tl.load(p_k1, boundary_check=(0, 1))
+            b_k1 = tl.load(p_k1, boundary_check=(0, 1), padding_option="zero")
             # diagonal block 1
             b_A11 += tl.dot(b_k1, tl.trans(b_k1))
             # off-diagonal (1,0)
@@ -162,7 +162,7 @@ def chunk_gated_delta_rule_fwd_kkt_solve_kernel(
                 p_k2 = tl.make_block_ptr(
                     k, (T, K), (Hg * K, 1), (i_tc2, i_k * BK), (BC, BK), (1, 0)
                 )
-                b_k2 = tl.load(p_k2, boundary_check=(0, 1))
+                b_k2 = tl.load(p_k2, boundary_check=(0, 1), padding_option="zero")
                 # diagonal block 2
                 b_A22 += tl.dot(b_k2, tl.trans(b_k2))
                 # off-diagonal (2,0), (2,1)
@@ -173,7 +173,7 @@ def chunk_gated_delta_rule_fwd_kkt_solve_kernel(
                     p_k3 = tl.make_block_ptr(
                         k, (T, K), (Hg * K, 1), (i_tc3, i_k * BK), (BC, BK), (1, 0)
                     )
-                    b_k3 = tl.load(p_k3, boundary_check=(0, 1))
+                    b_k3 = tl.load(p_k3, boundary_check=(0, 1), padding_option="zero")
                     # diagonal block 3
                     b_A33 += tl.dot(b_k3, tl.trans(b_k3))
                     # off-diagonal (3,0), (3,1), (3,2)

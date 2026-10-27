@@ -63,12 +63,12 @@ def layer_norm_gated_fwd_kernel(
     m_d = o_d < D
 
     p_x = tl.make_block_ptr(x, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0))
-    b_x = tl.load(p_x, boundary_check=(0, 1)).to(tl.float32)
+    b_x = tl.load(p_x, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
     if HAS_RESIDUAL:
         p_res = tl.make_block_ptr(
             residual, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0)
         )
-        b_x += tl.load(p_res, boundary_check=(0, 1)).to(tl.float32)
+        b_x += tl.load(p_res, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
     if STORE_RESIDUAL_OUT:
         p_res_out = tl.make_block_ptr(
             residual_out, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0)
@@ -116,7 +116,7 @@ def layer_norm_gated_fwd_kernel(
         ).to(tl.float32)
     else:
         p_g = tl.make_block_ptr(g, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0))
-        b_g = tl.load(p_g, boundary_check=(0, 1)).to(tl.float32)
+        b_g = tl.load(p_g, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
     if ACTIVATION == "swish" or ACTIVATION == "silu":
         b_y = b_y * b_g * tl.sigmoid(b_g)
     elif ACTIVATION == "sigmoid":
