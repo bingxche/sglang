@@ -382,8 +382,12 @@ def use_rowwise_torch_scaled_mm():
         # The condition to determine if it is on a platform that supports
         # torch._scaled_mm rowwise feature.
         # The condition is determined once as the operations
-        # are time consuming.
-        return get_device_capability() >= (9, 4) and torch_release >= (2, 7)
+        # are time consuming. hipBLASLt has no rowwise-scaled FP8 GEMM on gfx1250.
+        return (
+            get_device_capability() >= (9, 4)
+            and torch_release >= (2, 7)
+            and not _is_gfx1250_supported
+        )
     if _is_xpu:
         # XPU's torch._scaled_mm backend supports rowwise scaling.
         return True

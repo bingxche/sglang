@@ -765,6 +765,10 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         # CK's bpreshuffle GEMM requires N % 64 == 0. TP4 has BA=32,
         # so pad only the packed result, preserving the original Linear sizes.
         padded_width = (sum(widths) + 63) // 64 * 64
+        # The packed weight is laid out for that GEMM. Where apply_fp8_linear
+        # would not take it (gfx1250), keep the two separate projections.
+        if not use_aiter_bpreshuffle_gemm(padded_width):
+            return False
         weight = torch.zeros(
             (padded_width, projections[0].weight.shape[0]),
             dtype=projections[0].weight.dtype,
