@@ -49,6 +49,7 @@ from sglang.srt.utils import (
     set_weight_attrs,
     use_intel_amx_backend,
 )
+from sglang.srt.utils.common import is_gfx1250_supported
 from sglang.srt.utils.custom_op import register_custom_op
 
 if TYPE_CHECKING:
@@ -1077,6 +1078,11 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, BaseFusedOp):
                 "intermediate_size_per_partition="
                 f"{layer.intermediate_size_per_partition} is not 128-aligned"
             )
+
+        # Its bf16 2-stage kernels are xdlops (MFMA) only and do not build on gfx1250.
+        # This also gates the CK weight shuffle, which the Triton runner cannot read.
+        if is_gfx1250_supported():
+            return "the aiter CK bf16 fused-MoE kernels do not build on gfx1250"
 
         if not is_gfx95_supported():
             return None
